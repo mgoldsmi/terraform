@@ -312,6 +312,12 @@
 			"versionExact": "v7.2.1"
 		},
 		{
+			"checksumSHA1": "411j986zWNkH52tNuQP7rbcnlNE=",
+			"path": "github.com/Azure/go-ntlmssp",
+			"revision": "29affced641074a59483ed003b5ef73a8bd3593c",
+			"revisionTime": "2017-02-06T19:08:56Z"
+		},
+		{
 			"checksumSHA1": "ICScouhAqYHoJEpJlJMYg7EzgyY=",
 			"comment": "0.0.2-27-gedd0930",
 			"path": "github.com/CenturyLinkCloud/clc-sdk",
@@ -401,6 +407,33 @@
 			"path": "github.com/PuerkitoBio/urlesc",
 			"revision": "5bd2802263f21d8788851d5305584c82a5c75d7e",
 			"revisionTime": "2016-07-26T15:08:25Z"
+		},
+		{
+			"checksumSHA1": "IbUrUEaGbyx74KW3qOV2dnAT4aQ=",
+			"origin": "github.com/mgoldsmi/go-ntlm",
+			"path": "github.com/ThomsonReutersEikon/go-ntlm",
+			"revision": "bf7f7800bbd691c5f61823a870a4122c94d506f1",
+			"revisionTime": "2017-04-06T03:55:26Z",
+			"version": "f-ntlm-signing-sealing",
+			"versionExact": "f-ntlm-signing-sealing"
+		},
+		{
+			"checksumSHA1": "+1hg4hiRXqWOEBigr8fVvNSh1VY=",
+			"origin": "github.com/mgoldsmi/go-ntlm/ntlm",
+			"path": "github.com/ThomsonReutersEikon/go-ntlm/ntlm",
+			"revision": "bf7f7800bbd691c5f61823a870a4122c94d506f1",
+			"revisionTime": "2017-04-06T03:55:26Z",
+			"version": "f-ntlm-signing-sealing",
+			"versionExact": "f-ntlm-signing-sealing"
+		},
+		{
+			"checksumSHA1": "yoQAmBVfNWzSnHhTmjAX6YNwQvQ=",
+			"origin": "github.com/mgoldsmi/go-ntlm/ntlm/md4",
+			"path": "github.com/ThomsonReutersEikon/go-ntlm/ntlm/md4",
+			"revision": "bf7f7800bbd691c5f61823a870a4122c94d506f1",
+			"revisionTime": "2017-04-06T03:55:26Z",
+			"version": "f-ntlm-signing-sealing",
+			"versionExact": "f-ntlm-signing-sealing"
 		},
 		{
 			"checksumSHA1": "ly9VLPE9GKo2U7mnbZyjb2LDQ3w=",
@@ -2438,20 +2471,40 @@
 			"revisionTime": "2016-12-29T20:22:12Z"
 		},
 		{
+			"checksumSHA1": "qkcvba70i/ll+bN+BBxmgmK+6wM=",
+			"path": "github.com/masterzen/azure-sdk-for-go/core/http",
+			"revision": "ee4f0065d00cd12b542f18f5bc45799e88163b12",
+			"revisionTime": "2016-10-14T13:56:28Z"
+		},
+		{
+			"checksumSHA1": "MbiXInzXzXk/OjUg1pmgJvrbq/E=",
+			"path": "github.com/masterzen/azure-sdk-for-go/core/tls",
+			"revision": "ee4f0065d00cd12b542f18f5bc45799e88163b12",
+			"revisionTime": "2016-10-14T13:56:28Z"
+		},
+		{
 			"checksumSHA1": "yg57Q4J8Ob0LoYvqDxsWZ6AHffE=",
 			"path": "github.com/masterzen/simplexml/dom",
 			"revision": "4572e39b1ab9fe03ee513ce6fc7e289e98482190",
 			"revisionTime": "2016-06-08T18:30:07Z"
 		},
 		{
-			"checksumSHA1": "S9h7TFYtCXLDiyCj6jSl2ZY7whs=",
-			"path": "github.com/masterzen/winrm/soap",
-			"revision": "54ea5d01478cfc2afccec1504bd0dfcd8c260cfa"
+			"checksumSHA1": "/upcpyLnwuoy+fmHDTC64xLSVxc=",
+			"origin": "github.com/mgoldsmi/winrm",
+			"path": "github.com/masterzen/winrm",
+			"revision": "1bcf6d13ce01019894057bfcc0adef06525235ec",
+			"revisionTime": "2017-04-08T03:51:33Z",
+			"version": "f-negotiate-encrypted-messaging",
+			"versionExact": "f-negotiate-encrypted-messaging"
 		},
 		{
-			"checksumSHA1": "EDLx+ahJK3YagaYTnbE+VqE0ePs=",
-			"path": "github.com/masterzen/winrm/winrm",
-			"revision": "54ea5d01478cfc2afccec1504bd0dfcd8c260cfa"
+			"checksumSHA1": "GZTFMBR1Gce2etDJnB17x4pflLQ=",
+			"origin": "github.com/mgoldsmi/winrm/soap",
+			"path": "github.com/masterzen/winrm/soap",
+			"revision": "1bcf6d13ce01019894057bfcc0adef06525235ec",
+			"revisionTime": "2017-04-08T03:51:33Z",
+			"version": "f-negotiate-encrypted-messaging",
+			"versionExact": "f-negotiate-encrypted-messaging"
 		},
 		{
 			"checksumSHA1": "bx+egnFe0OB0BZBcgZcaqsvcmS4=",
@@ -2707,9 +2760,10 @@
 			"revisionTime": "2017-01-24T12:11:56Z"
 		},
 		{
-			"checksumSHA1": "d1VHczIGt2bhYR0BNkTedIS/9uk=",
+			"checksumSHA1": "e0mIwp1sI0bsCNA+Ae+N5+9ajSY=",
 			"path": "github.com/packer-community/winrmcp/winrmcp",
-			"revision": "3d184cea22ee1c41ec1697e0d830ff0c78f7ea97"
+			"revision": "c804d432b8b7fa77896f43cc426134348c3fd19e",
+			"revisionTime": "2017-01-28T14:33:28Z"
 		},
 		{
 			"checksumSHA1": "MexE5QPVAwVfQcJBnMGMgD+s9L0=",
@@ -3080,6 +3134,12 @@
 			"path": "golang.org/x/crypto/ed25519/internal/edwards25519",
 			"revision": "b8a2a83acfe6e6770b75de42d5ff4c67596675c0",
 			"revisionTime": "2017-01-13T19:21:00Z"
+		},
+		{
+			"checksumSHA1": "MCeXr2RNeiG1XG6V+er1OR0qyeo=",
+			"path": "golang.org/x/crypto/md4",
+			"revision": "6022e334c1a8cce46fb30629dc30e835faa3844d",
+			"revisionTime": "2017-04-08T17:54:05Z"
 		},
 		{
 			"checksumSHA1": "fsrFs762jlaILyqqQImS1GfvIvw=",
