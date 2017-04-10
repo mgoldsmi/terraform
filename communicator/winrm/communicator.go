@@ -12,7 +12,7 @@ import (
 
 	"github.com/hashicorp/terraform/communicator/remote"
 	"github.com/hashicorp/terraform/terraform"
-	"github.com/masterzen/winrm/winrm"
+	"github.com/masterzen/winrm"
 	"github.com/packer-community/winrmcp/winrmcp"
 
 	// This import is a bit strange, but it's needed so `make updatedeps` can see and download it
@@ -39,7 +39,10 @@ func New(s *terraform.InstanceState) (*Communicator, error) {
 		Port:     connInfo.Port,
 		HTTPS:    connInfo.HTTPS,
 		Insecure: connInfo.Insecure,
-		CACert:   connInfo.CACert,
+	}
+
+	if connInfo.CACert != nil {
+		copy(endpoint.CACert, *connInfo.CACert)
 	}
 
 	comm := &Communicator{
@@ -58,8 +61,11 @@ func (c *Communicator) Connect(o terraform.UIOutput) error {
 		return nil
 	}
 
-	params := winrm.DefaultParameters()
+	params := winrm.DefaultParameters
 	params.Timeout = formatDuration(c.Timeout())
+
+	// NTLM transport
+	params.TransportDecorator = func() winrm.Transporter { return &winrm.NegotiateEncryptedTransport{} }
 
 	client, err := winrm.NewClientWithParameters(
 		c.endpoint, c.connInfo.User, c.connInfo.Password, params)
