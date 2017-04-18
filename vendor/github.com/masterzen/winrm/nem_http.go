@@ -16,23 +16,27 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/masterzen/winrm/soap"
 	"github.com/ThomsonReutersEikon/go-ntlm/ntlm"
+	"github.com/masterzen/winrm/soap"
 )
+
+var NEMDefaultParameters = Parameters{Timeout: "PT60S", Locale: "en-US", EnvelopeSize: 153600, TransportDecorator: func() Transporter { return &NegotiateEncryptedTransport{Unencrypted: false} }}
 
 // NegotiateEncryptedTransport uses a security context established using NTLM to exchange encrypted HTTP payloads
 type NegotiateEncryptedTransport struct {
+	// Send message body unencrypted - should only be set for debugging purposes
+	Unencrypted bool
 	// Client NTLM session used to establish security context for the HTTP session
 	ntlmSession ntlm.ClientSession
+	// Credentials used to authenticate session
+	domain, username, password string
 	// Encrypted NTLM requires the sequence number to be tracked to provide session integrity
 	sequenceNumber uint32
 	// Authentication once estalished is persisted for duration of connection. See https://msdn.microsoft.com/en-us/library/cc236621.aspx
 	authenticated bool
-	// WinRM client containing credentials credentials used for current POST request.
-	client *Client
 	// Client Request is the default HTTP transport which we inherit from
 	httpTransporter clientRequest
-	// The original HTTP transport used by ClientRequest that this object has replaced to insert itself into the call path
+	// The original HTTP transport created by ClientRequest that this object has replaced to insert itself into the call path
 	http.RoundTripper
 }
 
@@ -44,14 +48,14 @@ const mimeMediaTypeOctetStream = "application/octet-stream"
 
 const CRLF = "\r\n"
 
-func (t NegotiateEncryptedTransport) Transport(endpoint *Endpoint) (err error) {
+func (t *NegotiateEncryptedTransport) Transport(endpoint *Endpoint) (err error) {
 	// Start by initialising the base HTTP transporter
 	if err = t.httpTransporter.Transport(endpoint); err != nil {
 		return err
 	}
 
 	// Initialise the NTLM context
-	mode := ntlm.Mode{Stream: true, Confidentiality: true}
+	mode := ntlm.Mode{Stream: true, Confidentiality: !t.Unencrypted}
 	if t.ntlmSession, err = ntlm.CreateClientSession(ntlm.Version2, mode); err != nil {
 		return err
 	}
@@ -63,16 +67,25 @@ func (t NegotiateEncryptedTransport) Transport(endpoint *Endpoint) (err error) {
 	return nil
 }
 
-func (t NegotiateEncryptedTransport) Post(client *Client, request *soap.SoapMessage) (string, error) {
-	// Store reference to the client who we are making this post request on behalf of
-	t.client = client
+func (t *NegotiateEncryptedTransport) Post(client *Client, request *soap.SoapMessage) (string, error) {
+	// Capture credentials used by transport to negotiate session
+	userparts := strings.SplitN(client.username, "\\", 2)
+	if len(userparts) == 2 {
+		t.domain = userparts[0]
+		t.username = userparts[1]
+	} else {
+		t.domain = ""
+		t.username = client.username
+	}
+
+	t.password = client.password
 
 	// Call the default HTTP transport. This will in turn involve our RoundTrip method which we have injected into the call path
 	return t.httpTransporter.Post(client, request)
 }
 
 // RoundTrip sends the request to the server, handling the NTLM authentication and message encryption
-func (t NegotiateEncryptedTransport) RoundTrip(req *http.Request) (res *http.Response, err error) {
+func (t *NegotiateEncryptedTransport) RoundTrip(req *http.Request) (res *http.Response, err error) {
 
 	// Alias common fields
 	ns := t.ntlmSession
@@ -83,11 +96,10 @@ func (t NegotiateEncryptedTransport) RoundTrip(req *http.Request) (res *http.Res
 		return nil, errors.New("NegotiateEncryptedTransport: Uninitialised transporter context")
 	}
 
-	// Remove any authorization headers. This implementation manages authorization using Negotiate method
+	// Remove any authorization headers. This implementation implements authorization using Negotiate method
 	req.Header.Del("Authorization")
 
 	// Save a copy of the request body and content type for later use
-	contentType := req.Header.Get("Content-Type")
 	body := bytes.Buffer{}
 	if req.Body != nil {
 		_, err = body.ReadFrom(req.Body)
@@ -100,8 +112,6 @@ func (t NegotiateEncryptedTransport) RoundTrip(req *http.Request) (res *http.Res
 		req.ContentLength = int64(body.Len())
 	}
 
-reauthenticate:
-
 	// If transport is not already authenticated, attempt to authenticate now
 	if !t.authenticated {
 
@@ -110,8 +120,11 @@ reauthenticate:
 		if err != nil {
 			return nil, err
 		}
+		setAuthorizationToken(req, negotiate.Bytes())
 
-		req.Header.Set("Authorization", authSchemeNegotiate+" "+base64.StdEncoding.EncodeToString(negotiate.Bytes()))
+		// Don't send body at this time
+		req.Body = nil
+		req.ContentLength = int64(0)
 
 		// We expect 401 response. If we receive any other type of error, return
 		if res, err = rt.RoundTrip(req); err != nil || res.StatusCode != http.StatusUnauthorized {
@@ -119,15 +132,9 @@ reauthenticate:
 		}
 
 		// Read challenge in the Www-Authenticate header
-		challengeBase64, err := getAuthenticationChallenge(res, authSchemeNegotiate)
+		challengeBytes, err := getAuthenticationToken(res)
 		if err != nil {
 			return res, fmt.Errorf("Unable to secure connection: %v", err)
-		}
-
-		// Decode and parse it
-		challengeBytes, err := base64.StdEncoding.DecodeString(challengeBase64)
-		if err != nil {
-			return res, err
 		}
 
 		challenge, err := ntlm.ParseChallengeMessage(challengeBytes)
@@ -136,18 +143,11 @@ reauthenticate:
 			return res, err
 		}
 
-		// Extract domain from user credentials, or use target domain from challenge response
-		var username, domain string
-		userparts := strings.SplitN(t.client.username, "\\", 2)
-		if len(userparts) == 1 {
-			domain = challenge.TargetInfo.StringValue(ntlm.MsvAvNbDomainName)
-			username = t.client.username
-		} else {
-			domain = userparts[0]
-			username = userparts[1]
+		// If domain not defined, used target domain from challenge response
+		if len(t.domain) == 0 {
+			t.domain = challenge.TargetInfo.StringValue(ntlm.MsvAvNbDomainName)
 		}
-
-		ns.SetUserInfo(username, t.client.password, domain)
+		ns.SetUserInfo(t.username, t.password, t.domain)
 		// FIXME: Remove this
 		// log.Printf("[INFO] Username: %v, password %v, domain: %v", username, t.client.password, domain)
 
@@ -159,7 +159,9 @@ reauthenticate:
 			return res, err
 		}
 
-		req.Header.Set("Authorization", authSchemeNegotiate+" "+base64.StdEncoding.EncodeToString(authenticate.Bytes()))
+		setAuthorizationToken(req, authenticate.Bytes())
+
+		// Send original request body
 		req.Body = ioutil.NopCloser(bytes.NewReader(body.Bytes()))
 		req.ContentLength = int64(body.Len())
 	}
@@ -194,47 +196,45 @@ reauthenticate:
 		}
 
 		t.sequenceNumber++
-
-	} else if res.StatusCode == 401 {
-		// Authentication lost. Reset request and re-authenticate
-		req.Header.Set("Content-Type", contentType)
-		req.Body = ioutil.NopCloser(bytes.NewReader(body.Bytes()))
-		req.ContentLength = int64(body.Len())
-
-		t.authenticated = false
-
-		goto reauthenticate
-		// FIXME: Commence re-authentication
 	}
 
 	return res, err
 }
 
-// Searches the HTTP response for a WWW-Authenticate header matching the given scheme and returns the first challenge
+// Sets the Authorization header in the HTTP request, base64 encoding the NTLM token
+func setAuthorizationToken(req *http.Request, token []byte) {
+	req.Header.Set("Authorization", authSchemeNegotiate+" "+base64.StdEncoding.EncodeToString(token))
+}
+
+// Searches the HTTP response for a WWW-Authenticate header matching the given scheme and returns the base64 decoded NTLM token
 // RFC2617 allows for multiple challenges to be returned however this method returns only the first
-func getAuthenticationChallenge(res *http.Response, scheme string) (challenge string, err error) {
+func getAuthenticationToken(res *http.Response) (token []byte, err error) {
 	// Read challenge in the WWW-Authenticate header
-	wwwAuthenticate := res.Header["wwwAuthenticate"]
-	if wwwAuthenticate == nil {
-		return "", errors.New("No WWW-Authenticate header in response")
+	wwwAuthenticate, ok := res.Header["Www-Authenticate"]
+	if !ok {
+		return nil, errors.New("No WWW-Authenticate header in response")
 	}
 
 	// Search authenticate headers for given scheme
 	for _, v := range wwwAuthenticate {
 		authTokens := strings.Fields(v)
-		if authTokens[0] == scheme {
+		if authTokens[0] == authSchemeNegotiate {
 			// Return the first challenge only
-			return authTokens[1], nil
+			token, err = base64.StdEncoding.DecodeString(authTokens[1])
+			if err != nil {
+				return nil, err
+			}
+			return token, nil
 		}
 	}
 
 	// Nothing found
-	return "", errors.New("No Negotiate authorization header found in response")
+	return nil, errors.New("No Negotiate authorization header found in response")
 }
 
 // Rewrite the body of the request as a NegotiateEncryptedMessage according to the Web Services Management Protocol Extensions for Windows Vista
 // using the NTLM credentials established in the authentication process
-func (t NegotiateEncryptedTransport) encodeEncryptedRequest(req *http.Request) (err error) {
+func (t *NegotiateEncryptedTransport) encodeEncryptedRequest(req *http.Request) (err error) {
 
 	ns := t.ntlmSession
 
@@ -255,73 +255,36 @@ func (t NegotiateEncryptedTransport) encodeEncryptedRequest(req *http.Request) (
 	}
 
 	// Write encrypted body back using MIME multipart media encapsualtion
+	// Note: Unable to use mime/multipart for the implementation as MS-WSMV standard is not 100% compatible with MIME multipart standard
 	// Part 1
 	bodyBuf := bytes.Buffer{}
-	// wsmpEncryptedBodyWriter := multipart.NewWriter(&bodyBuf)
-
-	// Work-around for golang issue #18768 (mime/multipart: SetBoundary validation is overly restrictive)
-	// Use random boundary and then search/replace later
-	//if err := ntlmBodyWriter.SetBoundary(multipartBoundary); err != nil {
-	//	return nil, errors.New("Failed to set boundary: " + err.Error())
-	//}
-
-	//h1 := textproto.MIMEHeader{}
-	//h1.Add(mimeHeaderContentType, textprotoSPNEGOEncrypted)
-	//h1.Add(mimeHeaderOriginalContent, fmt.Sprintf("type=%s;Length=%d", req.Header.Get(mimeHeaderContentType), body.Len()))
-	//wsmpEncryptedBodyWriter.CreatePart(h1)
-
 	bodyBuf.WriteString("--" + multipartBoundary + CRLF)
 	bodyBuf.WriteString("Content-Type: " + mimeMediaTypeSPNEGOEncrypted + CRLF)
 	bodyBuf.WriteString(fmt.Sprintf("OriginalContent: type=%s;Length=%d", req.Header.Get("Content-Type"), body.Len()) + CRLF)
 
 	// Part 2
-	//h2 := textproto.MIMEHeader{}
-	//h2.Add(mimeHeaderContentType, textprotoOctetStream)
-	//p2, err := wsmpEncryptedBodyWriter.CreatePart(h2)
-	//if err != nil {
-	//	return nil, err
-	//}
-
 	bodyBuf.WriteString("--" + multipartBoundary + CRLF)
 	bodyBuf.WriteString("Content-Type: " + mimeMediaTypeOctetStream + CRLF)
 
 	// Seal and the sign the request body
-	log.Printf("[INFO] NTLM sealing message")
 	encryptedBody, mac, err := ns.Wrap(body.Bytes(), t.sequenceNumber)
 	if err != nil {
 		return err
 	}
 
-	//	log.Printf("[INFO] NTLM signing message")
-	//	mac, err := ns.Mac(body.Bytes(), )
-	//	if err != nil {
-	//		return err
-	//	}
-
 	// Write the encrypted message (length(mac) + mac + encryptedBody)
 	lengthField := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lengthField, uint32(len(mac)))
-	//p2.Write(lengthField)
-	//p2.Write(mac)
-	//p2.Write(encryptedBody)
-
-	//bodyBuf.WriteString(CRLF)
 	bodyBuf.Write(lengthField)
 	bodyBuf.Write(mac)
 	bodyBuf.Write(encryptedBody)
 
 	// Close message
-	//	mimeBody.WriteString("--" + multipartBoundary + CRLF)
-	//wsmpEncryptedBodyWriter.Close()
 	bodyBuf.WriteString("--" + multipartBoundary + "--" + CRLF)
 
-	// Fix for golang issue #18768 (mime/multipart: SetBoundary validation is overly restrictive)
-	//wsmpEncryptedBody := bytes.Replace(bodyBuf.Bytes(), []byte(wsmpEncryptedBodyWriter.Boundary()), []byte(multipartBoundary), -1)
-	//wsmpEncryptedBody = bytes.Replace(wsmpEncryptedBody, []byte(mimeHeaderOriginalContent), []byte(mimeHeaderOriginalContent), -1)
 	encBody := bodyBuf.Bytes()
 
 	// Send request
-	log.Printf("[INFO] Sending message")
 	req.Header.Set("Content-Type", fmt.Sprintf("%s;protocol=\"%s\";boundary=\"%s\"", mimeMediaTypeMultipartEncrypted, mimeMediaTypeSPNEGOEncrypted, multipartBoundary))
 	req.Body = ioutil.NopCloser(bytes.NewReader(encBody))
 	req.ContentLength = int64(len(encBody))
@@ -329,7 +292,7 @@ func (t NegotiateEncryptedTransport) encodeEncryptedRequest(req *http.Request) (
 	return nil
 }
 
-func (t NegotiateEncryptedTransport) decodeEncryptedResponse(res *http.Response) (err error) {
+func (t *NegotiateEncryptedTransport) decodeEncryptedResponse(res *http.Response) (err error) {
 
 	ns := t.ntlmSession
 
@@ -471,15 +434,6 @@ func (t NegotiateEncryptedTransport) decodeEncryptedResponse(res *http.Response)
 		err := fmt.Errorf("Unable to unencrypt message - %s", err)
 		return err
 	}
-
-	// And validate signature
-	//	if verified, err := ns.VerifyMac(message, mac, c.sequenceNumber); err != nil {
-	//		err := fmt.Errorf("Unable to verify MAC - unexpected error: %s", err)
-	//		return err
-	//	} else if !verified {
-	//		err := fmt.Errorf("MAC of response message does not verify. Discarding response")
-	//		return err
-	//	}
 
 	// Fix response and return
 	res.Header.Set("Content-Type", strings.TrimPrefix(originalContent, "type="))

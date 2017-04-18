@@ -25,6 +25,12 @@ const (
 
 	// DefaultTimeout is used if there is no timeout given
 	DefaultTimeout = 5 * time.Minute
+
+	// Authentication methods
+	// DefaultAuth is Basic Authentication for backwards compatibility
+	AuthBasic     = "Basic"
+	AuthNegotiate = "Negotiate"
+	DefaultAuth   = AuthBasic
 )
 
 // connectionInfo is decoded from the ConnInfo of the resource. These are the
@@ -36,6 +42,7 @@ type connectionInfo struct {
 	Host       string
 	Port       int
 	HTTPS      bool
+	Auth       string
 	Insecure   bool
 	CACert     *[]byte `mapstructure:"ca_cert"`
 	Timeout    string
@@ -88,6 +95,18 @@ func parseConnectionInfo(s *terraform.InstanceState) (*connectionInfo, error) {
 		connInfo.TimeoutVal = safeDuration(connInfo.Timeout, DefaultTimeout)
 	} else {
 		connInfo.TimeoutVal = DefaultTimeout
+	}
+
+	// Check authentication method is set to a supported value
+	switch strings.ToLower(connInfo.Auth) {
+	case "basic": // The default connection type is ssh, so if connType is empty use ssh
+		connInfo.Auth = AuthBasic
+	case "negotiate":
+		connInfo.Auth = AuthNegotiate
+	case "":
+		connInfo.Auth = DefaultAuth
+	default:
+		return nil, fmt.Errorf("authentication method '%s' not supported", connInfo.Auth)
 	}
 
 	return connInfo, nil

@@ -64,8 +64,10 @@ func (c *Communicator) Connect(o terraform.UIOutput) error {
 	params := winrm.DefaultParameters
 	params.Timeout = formatDuration(c.Timeout())
 
-	// NTLM transport
-	params.TransportDecorator = func() winrm.Transporter { return &winrm.NegotiateEncryptedTransport{} }
+	// Set transport to enable Negotiate authentication
+	if c.connInfo.Auth == AuthNegotiate {
+		params.TransportDecorator = func() winrm.Transporter { return &winrm.NegotiateEncryptedTransport{Unencrypted: false} }
+	}
 
 	client, err := winrm.NewClientWithParameters(
 		c.endpoint, c.connInfo.User, c.connInfo.Password, params)
@@ -212,6 +214,11 @@ func (c *Communicator) newCopyClient() (*winrmcp.Winrmcp, error) {
 		Insecure:              c.connInfo.Insecure,
 		OperationTimeout:      c.Timeout(),
 		MaxOperationsPerShell: 15, // lowest common denominator
+	}
+
+	// Set transport to enable Negotiate authentication
+	if c.connInfo.Auth == AuthNegotiate {
+		config.TransportDecorator = func() winrm.Transporter { return &winrm.NegotiateEncryptedTransport{Unencrypted: false} }
 	}
 
 	if c.connInfo.CACert != nil {

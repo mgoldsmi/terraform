@@ -2489,11 +2489,11 @@
 			"revisionTime": "2016-06-08T18:30:07Z"
 		},
 		{
-			"checksumSHA1": "/upcpyLnwuoy+fmHDTC64xLSVxc=",
+			"checksumSHA1": "phcHGz5sPC7Gkuat+xaEtADKUec=",
 			"origin": "github.com/mgoldsmi/winrm",
 			"path": "github.com/masterzen/winrm",
-			"revision": "1bcf6d13ce01019894057bfcc0adef06525235ec",
-			"revisionTime": "2017-04-08T03:51:33Z",
+			"revision": "c8da3335dda370cddf95211abbdcad26d7559144",
+			"revisionTime": "2017-04-18T01:17:11Z",
 			"version": "f-negotiate-encrypted-messaging",
 			"versionExact": "f-negotiate-encrypted-messaging"
 		},
